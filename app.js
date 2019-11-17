@@ -1,9 +1,49 @@
 const express = require('express');
+const graphqlHTTP = require('express-graphql');
+const { buildSchema } = require('graphql');
 const crypto = require('crypto');
 const axios = require('axios');
 const app = express();
 const port = 3000;
-require('dotenv').config()
+require('dotenv').config();
+
+const schema = buildSchema(`
+  type Query {
+    images(q: String!): [Image]
+  },
+  type Image {
+    image_ID: String,
+    thumbnails: String,
+    preview: String,
+    title: String,
+    source: String!,
+    tags: [String],
+  }
+`);
+
+const root = {
+    images: async function (args) {
+        const query = args.q;
+        const imageFromStoryblocks = await searchImageFromStoryblocks(query);
+        const imageFromUnsplash = await searchImageFromUnsplash(query);
+        const imageFromPixabay = await searchImageFromPixabay(query);
+
+        return [
+            imageFromUnsplash,
+            imageFromPixabay,
+            imageFromStoryblocks,
+        ];
+    },
+};
+
+app.use(
+    '/graphql',
+    graphqlHTTP({
+        schema: schema,
+        rootValue: root,
+        graphiql: true,
+    }),
+);
 
 const searchImageFromStoryblocks = async function (query) {
     const publicKey = process.env.STORYBLOCKS_PUBLIC_KEY;
@@ -145,11 +185,15 @@ app.get('/search', async function (req, res) {
     const imageFromUnsplash = await searchImageFromUnsplash(query);
     const imageFromPixabay = await searchImageFromPixabay(query);
 
-    res.json([
-        imageFromUnsplash,
-        imageFromPixabay,
-        imageFromStoryblocks,
-    ]);
-})
+    res.json({
+        data: {
+            images: [
+                imageFromUnsplash,
+                imageFromPixabay,
+                imageFromStoryblocks,
+            ],
+        }
+    });
+});
 
 app.listen(port, () => console.log(`app listening on port ${port}!`));
